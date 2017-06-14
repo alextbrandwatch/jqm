@@ -30,7 +30,7 @@ public class DbImplOracle implements DbAdapter
         }
 
         queries.put("ji_update_poll",
-                "UPDATE tmpjqm.JOB_INSTANCE j1 SET NODE=?, STATUS='ATTRIBUTED', DATE_ATTRIBUTION=CURRENT_TIMESTAMP WHERE rowid IN (SELECT rid FROM (SELECT rowid as rid FROM tmpjqm.JOB_INSTANCE j2 WHERE j2.STATUS='SUBMITTED' AND j2.QUEUE=? AND (j2.HIGHLANDER=0 OR (j2.HIGHLANDER=1 AND (SELECT COUNT(1) FROM tmpjqm.JOB_INSTANCE j3 WHERE j3.STATUS IN('ATTRIBUTED', 'RUNNING') AND j3.JOBDEF=j2.JOBDEF)=0)) ORDER BY INTERNAL_POSITION) WHERE rownum < ?)");
+                "UPDATE JOB_INSTANCE j1 SET NODE=?, STATUS='ATTRIBUTED', DATE_ATTRIBUTION=CURRENT_TIMESTAMP WHERE rowid IN (SELECT rid FROM (SELECT rowid as rid FROM JOB_INSTANCE j2 WHERE j2.STATUS='SUBMITTED' AND j2.QUEUE=? AND (j2.HIGHLANDER=0 OR (j2.HIGHLANDER=1 AND (SELECT COUNT(1) FROM JOB_INSTANCE j3 WHERE j3.STATUS IN('ATTRIBUTED', 'RUNNING') AND j3.JOBDEF=j2.JOBDEF)=0)) ORDER BY INTERNAL_POSITION) WHERE rownum <= ?)");
     }
 
     @Override
@@ -64,7 +64,58 @@ public class DbImplOracle implements DbAdapter
     @Override
     public void beforeUpdate(Connection cnx, QueryPreparation q)
     {
-        return;
+        // It is possible to use ? parameters for arrays in Oracle, but only by using some internal Oracle objects.
+        // as we do not want a dependency on this driver, even optional/provided, we do not use it.
+        // We may one day revisit this using reflection.
+        if (q.sqlText.contains("IN(?)"))
+        {
+            int index = q.sqlText.indexOf("IN(?)");
+            int nbIn = 0;
+            while (index >= 0)
+            {
+                index = q.sqlText.indexOf("IN(?)", index + 1);
+                nbIn++;
+            }
+
+            int nbList = 0;
+            ArrayList<Object> newParams = new ArrayList<Object>(q.parameters.size() + 10);
+            for (Object o : q.parameters)
+            {
+                if (o instanceof List<?>)
+                {
+                    nbList++;
+                    List<?> vv = (List<?>) o;
+                    if (vv.size() == 0)
+                    {
+                        throw new DatabaseException("Cannot do a query whith an empty list parameter");
+                    }
+
+                    newParams.addAll(vv);
+
+                    String newPrm[] = new String[vv.size()];
+                    for (int j = 0; j < vv.size(); j++)
+                    {
+                        newPrm[j] = "?";
+                    }
+                    StringBuilder sb = new StringBuilder();
+                    for (int j = 0; j < vv.size(); j++)
+                    {
+                        sb.append("?,");
+                    }
+                    q.sqlText = q.sqlText.replaceFirst("IN\\(\\?\\)", "IN(" + sb.substring(0, sb.length() - 1) + ")");
+                }
+                else
+                {
+                    newParams.add(o);
+                }
+            }
+            q.parameters = newParams;
+
+            if (nbList != nbIn)
+            {
+                throw new DatabaseException("Mismatch: count of list parameters and of IN clauses is different.");
+            }
+        }
     }
 
     @Override
@@ -78,11 +129,13 @@ public class DbImplOracle implements DbAdapter
     public String paginateQuery(String sql, int start, int stopBefore, List<Object> prms)
     {
         int pageSize = stopBefore - start;
-        sql = String.format("SELECT * FROM ( SELECT /*+ FIRST_ROWS(?) */ a.*, ROWNUM rnum FROM (%s) a WHERE ROWNUM < ?) WHERE RNUM >= ?",
+        sql = String.format(
+                "SELECT * FROM ( SELECT /*+ FIRST_ROWS(" + pageSize + ") */ a.*, ROWNUM rnum FROM (%s) a WHERE ROWNUM < ?) WHERE RNUM >= ?",
                 sql);
-        prms.add(0, pageSize);
+        // prms.add(0, pageSize);
         prms.add(stopBefore);
         prms.add(start + 1);
         return sql;
     }
+
 }

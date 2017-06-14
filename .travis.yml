@@ -17,3 +17,4 @@ env:
 branches:
   except:
   - controller
+  - oracle

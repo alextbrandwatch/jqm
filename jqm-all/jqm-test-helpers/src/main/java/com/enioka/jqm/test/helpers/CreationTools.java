@@ -160,7 +160,7 @@ public class CreationTools
         prms.put("initialSize", "2");
         prms.put("jmxEnabled", "false");
         prms.put("username", user);
-        prms.put("password", pwd);
+        prms.put("password", pwd == null || pwd.isEmpty() ? " " : pwd);
         prms.put("driverClassName", driver);
         prms.put("url", url);
         prms.put("validationQuery", validationQuery);
