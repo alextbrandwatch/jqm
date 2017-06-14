@@ -45,10 +45,10 @@ public class TestHelpers
 
     public static void createTestData(DbConn cnx)
     {
-        CreationTools.createDatabaseProp("jdbc/marsu", "org.hsqldb.jdbcDriver", "jdbc:hsqldb:mem:testdb", "SA", "", cnx,
+        CreationTools.createDatabaseProp("jdbc/marsu", "org.hsqldb.jdbcDriver", "jdbc:hsqldb:mem:testdb", "SA", " ", cnx,
                 "SELECT 1 FROM INFORMATION_SCHEMA.SYSTEM_USERS", null);
 
-        GlobalParameter.create(cnx, "mavenRepo", "http://repo1.maven.org/maven2/");
+        GlobalParameter.create(cnx, "mavenRepo", "http://gep-pic.intranet.geodis.org/nexus/content/groups/public/");
         GlobalParameter.create(cnx, "defaultConnection", "jdbc/marsu");
         GlobalParameter.create(cnx, "logFilePerLaunch", "false");
         GlobalParameter.create(cnx, "internalPollingPeriodMs", "60000");
